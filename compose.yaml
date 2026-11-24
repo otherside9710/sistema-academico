@@ -1,0 +1,9 @@
+services:
+  campus-academico:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sistema-academico:local
+    ports:
+      - "${APP_PORT:-8080}:80"
+    restart: unless-stopped

@@ -36,6 +36,34 @@ npm run build
 npm run preview
 ```
 
+## Ejecutar con Docker
+
+Necesitas Docker Desktop, o Docker Engine con el plugin de Docker Compose.
+
+Desde la carpeta `sistema-academico`, construye la imagen y levanta el contenedor:
+
+```sh
+docker compose up --build -d
+```
+
+Abre `http://localhost:8080`. Docker construye los recursos estáticos de React en una etapa Node y Nginx los sirve en la etapa final; no hay un servicio backend.
+
+Comandos útiles:
+
+```sh
+docker compose ps
+docker compose logs -f campus-academico
+docker compose down
+```
+
+El puerto del equipo es `8080` por defecto. Para usar otro, por ejemplo `8081`:
+
+```sh
+APP_PORT=8081 docker compose up --build -d
+```
+
+El `.env` se lee al construir la imagen porque las variables `VITE_` se incorporan a los archivos frontend durante la compilación. Si cambias esos valores, vuelve a construir con `docker compose up --build -d`. La sesión y los datos de prueba continúan guardándose en el `localStorage` de cada navegador.
+
 ## Perfiles de demostración
 
 En la pantalla de inicio se puede seleccionar uno de los perfiles. La contraseña para todos es `demo123`.
@@ -125,7 +153,11 @@ No forman parte del alcance de esta demo: cartera, facturación, recaudo de matr
 .
 ├── .env                     # Configuración pública incluida para la demo
 ├── .env.example             # Plantilla de configuración
+├── .dockerignore            # Archivos excluidos del contexto Docker
+├── Dockerfile               # Compilación React y servidor Nginx
+├── compose.yaml             # Servicio local de Docker Compose
 ├── index.html               # Entrada de Vite
+├── nginx.conf               # Fallback SPA y endpoint de salud
 ├── package.json             # Dependencias y comandos
 ├── vite.config.js           # Configuración de Vite y React
 ├── src/

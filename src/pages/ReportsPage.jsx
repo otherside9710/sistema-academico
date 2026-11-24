@@ -1,0 +1,41 @@
+import { Activity, BookOpenCheck, Download, FileSpreadsheet, Users } from 'lucide-react'
+import { useAcademy } from '../context/AcademyContext.jsx'
+import { Badge, Button, PageHeading } from '../components/ui.jsx'
+import { exportCsv, fullName, getEntity, localDate } from '../utils.js'
+
+export default function ReportsPage({ person }) {
+  const { data } = useAcademy()
+  const programId = person.role === 'coordinator' ? person.programId : null
+  const program = getEntity(data.programs, programId)
+  const assignments = data.assignments.filter((item) => !programId || item.programId === programId)
+  const assignmentIds = assignments.map((item) => item.id)
+  const plans = data.plans.filter((plan) => assignmentIds.includes(plan.assignmentId))
+  const sessions = data.attendanceSessions.filter((session) => assignmentIds.includes(session.assignmentId))
+  const details = sessions.flatMap((session) => session.details)
+  const totalWeeks = plans.flatMap((plan) => plan.weeks).length
+  const completedWeeks = plans.flatMap((plan) => plan.weeks).filter((week) => week.completed).length
+  const planProgress = totalWeeks ? Math.round(completedWeeks / totalWeeks * 100) : 0
+  const present = details.filter((detail) => detail.status === 'Presente').length
+  const late = details.filter((detail) => detail.status === 'Tardanza').length
+  const absent = details.filter((detail) => detail.status === 'Ausente').length
+  const attendanceRate = details.length ? Math.round((present + late) / details.length * 100) : 0
+  const allStudents = [...new Set(assignments.flatMap((assignment) => assignment.studentIds))]
+  const grouped = assignments.map((assignment) => {
+    const subject = getEntity(data.subjects, assignment.subjectId)
+    const teacher = getEntity(data.people, assignment.teacherId)
+    const assignmentSessions = sessions.filter((session) => session.assignmentId === assignment.id)
+    const courseDetails = assignmentSessions.flatMap((session) => session.details)
+    const coursePresent = courseDetails.filter((detail) => detail.status === 'Presente' || detail.status === 'Tardanza').length
+    const rate = courseDetails.length ? Math.round(coursePresent / courseDetails.length * 100) : null
+    const plan = plans.find((item) => item.assignmentId === assignment.id)
+    const progress = plan ? Math.round(plan.weeks.filter((week) => week.completed).length / Math.max(plan.weeks.length, 1) * 100) : null
+    return { assignment, subject, teacher, assignmentSessions, rate, progress }
+  })
+  const exportReport = () => exportCsv('reporte-academico-' + (program?.code || 'institucional') + '.csv', [['Materia', 'Grupo', 'Programa', 'Docente', 'Estudiantes', 'Sesiones', 'Asistencia', 'Avance del plan'], ...grouped.map(({ assignment, subject, teacher, assignmentSessions, rate, progress }) => [subject?.name || '', assignment.group, getEntity(data.programs, assignment.programId)?.name || '', fullName(teacher), assignment.studentIds.length, assignmentSessions.length, rate === null ? '' : rate + '%', progress === null ? '' : progress + '%'])])
+
+  return <><PageHeading eyebrow={program ? 'SEGUIMIENTO DEL PROGRAMA' : 'INFORMACIÓN INSTITUCIONAL'} title={program ? 'Seguimiento académico' : 'Reportes'} description={program ? 'Indicadores de programación y cumplimiento de ' + program.name + '.' : 'Una vista consolidada de la operación académica del periodo.'} action={<Button variant="secondary" icon={Download} onClick={exportReport}>Exportar reporte</Button>}><span className="heading-subline"><span className="heading-green-dot" />Periodo {import.meta.env.VITE_DEFAULT_PERIOD || '2026-2'} <span className="heading-dot">·</span> Actualizado {localDate(new Date().toISOString().slice(0, 10))}</span></PageHeading>
+    <div className="report-kpis"><article><span className="report-kpi-icon report-blue"><Users size={18} /></span><span><small>ESTUDIANTES PROGRAMADOS</small><strong>{allStudents.length}</strong><em>en {assignments.length} grupos</em></span></article><article><span className="report-kpi-icon report-purple"><Activity size={18} /></span><span><small>ASISTENCIA REGISTRADA</small><strong>{attendanceRate}%</strong><em>{present + late} presentes · {absent} ausencias</em></span></article><article><span className="report-kpi-icon report-mint"><BookOpenCheck size={18} /></span><span><small>AVANCE DEL MICROCURRÍCULO</small><strong>{planProgress}%</strong><em>{completedWeeks} de {totalWeeks} semanas reportadas</em></span></article><article><span className="report-kpi-icon report-orange"><FileSpreadsheet size={18} /></span><span><small>SESIONES REGISTRADAS</small><strong>{sessions.length}</strong><em>en {new Set(sessions.map((session) => session.date)).size} fechas</em></span></article></div>
+    <div className="reports-grid"><section className="surface-card attendance-report"><div className="surface-heading"><div><span className="surface-kicker">PARTICIPACIÓN ESTUDIANTIL</span><h2>Resumen de asistencia</h2></div><Badge tone="blue">{details.length} marcaciones</Badge></div><div className="attendance-report-total"><strong>{attendanceRate}%</strong><span>asistencia promedio registrada</span></div><div className="report-bar-list">{[['Presente', present, 'report-fill-mint'], ['Tardanza', late, 'report-fill-orange'], ['Ausente', absent, 'report-fill-red']].map(([label, count, tone]) => <div className="report-bar-row" key={label}><div><span>{label}</span><strong>{count}</strong></div><div className="report-bar-track"><div className={tone} style={{ width: details.length ? (count / details.length * 100) + '%' : '0%' }} /></div></div>)}</div><p className="report-footnote">Los porcentajes consideran las marcaciones disponibles, por grupo y sesión.</p></section><section className="surface-card curriculum-report"><div className="surface-heading"><div><span className="surface-kicker">EJECUCIÓN DEL PLAN</span><h2>Seguimiento semanal</h2></div><BookOpenCheck size={18} className="report-section-icon" /></div>{plans.length ? <div className="report-plan-list">{plans.map((plan) => { const assignment = getEntity(data.assignments, plan.assignmentId); const subject = getEntity(data.subjects, assignment?.subjectId); const progress = Math.round(plan.weeks.filter((week) => week.completed).length / Math.max(plan.weeks.length, 1) * 100); return <div className="report-plan-item" key={plan.id}><div><strong>{subject?.name || 'Asignatura'}</strong><span>{getEntity(data.people, plan.teacherId)?.firstName || 'Docente'} · {progress}%</span></div><div className="progress-large"><div style={{ width: progress + '%' }} /></div></div> })}</div> : <div className="report-empty">Aún no hay planes de ejecución para el periodo.</div>}<div className="report-footnote">{plans.length} planes asociados a {assignments.length} grupos programados.</div></section></div>
+    <section className="table-card report-table-card"><div className="table-card-heading"><div><FileSpreadsheet size={18} /><strong>Detalle por grupo</strong><span>{grouped.length} grupos</span></div><button className="report-export-link" onClick={exportReport}><Download size={15} /> Descargar CSV</button></div><div className="table-scroll"><table className="data-table"><thead><tr><th>ASIGNATURA Y GRUPO</th><th>DOCENTE</th><th>ESTUDIANTES</th><th>ASISTENCIA</th><th>AVANCE DEL PLAN</th><th>SESIONES</th></tr></thead><tbody>{grouped.map(({ assignment, subject, teacher, assignmentSessions, rate, progress }) => <tr key={assignment.id}><td><div className="stack-cell"><strong>{subject?.name || 'Asignatura'}</strong><small>{getEntity(data.programs, assignment.programId)?.code} · Grupo {assignment.group}</small></div></td><td>{fullName(teacher)}</td><td><Badge tone="blue">{assignment.studentIds.length}</Badge></td><td>{rate === null ? <Badge>Sin datos</Badge> : <Badge tone={rate >= 80 ? 'mint' : 'orange'}>{rate}%</Badge>}</td><td>{progress === null ? <Badge>Sin plan</Badge> : <div className="table-progress"><div className="progress-mini"><i style={{ width: progress + '%' }} /></div><strong>{progress}%</strong></div>}</td><td>{assignmentSessions.length}</td></tr>)}</tbody></table></div><div className="table-pagination"><span>El reporte usa los registros demo guardados en el navegador.</span><span>Los datos de ICFES y SISBEN son simulados.</span></div></section>
+  </>
+}
